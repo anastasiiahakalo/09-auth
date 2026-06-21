@@ -13,25 +13,23 @@ export type NotesResponse = {
   totalPages: number;
 };
 
+export type CreateNoteData = {
+  title: string;
+  content: string;
+  tag: string;
+};
+
 export const fetchNotes = async (
   search: string = '',
   page: number = 1,
   tag?: string
 ): Promise<NotesResponse> => {
-  const params: Record<string, string | number> = {
-    search,
-    page,
-  };
+  const params: Record<string, string | number> = { search, page };
 
-  if (tag) {
-    params.tag = tag;
-  }
+  if (tag) params.tag = tag;
 
-  const response = await api.get<NotesResponse>('/notes', {
-    params,
-  });
-
-  return response.data;
+  const { data } = await api.get<NotesResponse>('/notes', { params });
+  return data;
 };
 
 export const fetchNoteById = async (id: string): Promise<Note> => {
@@ -39,15 +37,7 @@ export const fetchNoteById = async (id: string): Promise<Note> => {
   return data;
 };
 
-export type CreateNoteData = {
-  title: string;
-  content: string;
-  tag: string;
-};
-
-export const createNote = async (
-  body: CreateNoteData
-): Promise<Note> => {
+export const createNote = async (body: CreateNoteData): Promise<Note> => {
   const { data } = await api.post<Note>('/notes', body);
   return data;
 };
