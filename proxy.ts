@@ -4,7 +4,7 @@ import { checkSession } from '@/lib/api/serverApi';
 const privateRoutes = ['/notes', '/profile'];
 const publicRoutes = ['/sign-in', '/sign-up'];
 
-export async function proxy(request: NextRequest) {
+export default async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   const isPrivateRoute = privateRoutes.some((route) =>
@@ -15,21 +15,44 @@ export async function proxy(request: NextRequest) {
     pathname.startsWith(route)
   );
 
-  const session = await checkSession();
+  const accessToken = request.cookies.get('accessToken')?.value;
+  const refreshToken = request.cookies.get('refreshToken')?.value;
 
-  if (isPrivateRoute && !session) {
+  let isAuthenticated = Boolean(accessToken);
+
+  let response = NextResponse.next();
+
+  if (!accessToken && refreshToken) {
+    try {
+      const sessionResponse = await checkSession();
+      const setCookie = sessionResponse.headers['set-cookie'];
+
+      if (setCookie) {
+        response.headers.set(
+          'set-cookie',
+          Array.isArray(setCookie) ? setCookie.join(', ') : setCookie
+        );
+      }
+
+      isAuthenticated = Boolean(sessionResponse.data);
+    } catch {
+      isAuthenticated = false;
+    }
+  }
+
+  if (isPrivateRoute && !isAuthenticated) {
     const url = request.nextUrl.clone();
     url.pathname = '/sign-in';
     return NextResponse.redirect(url);
   }
 
-  if (isPublicRoute && session) {
+  if (isPublicRoute && isAuthenticated) {
     const url = request.nextUrl.clone();
-    url.pathname = '/profile';
+    url.pathname = '/';
     return NextResponse.redirect(url);
   }
 
-  return NextResponse.next();
+  return response;
 }
 
 export const config = {

@@ -2,11 +2,11 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { login } from '@/lib/api/clientApi';
+import { register } from '@/lib/api/clientApi';
 import { useAuthStore } from '@/lib/store/authStore';
-import css from './SignInPage.module.css';
+import css from './SignUpPage.module.css';
 
-export default function SignInPage() {
+export default function SignUpPage() {
   const router = useRouter();
   const setUser = useAuthStore((state) => state.setUser);
   const [error, setError] = useState('');
@@ -18,19 +18,19 @@ export default function SignInPage() {
       const email = String(formData.get('email') ?? '');
       const password = String(formData.get('password') ?? '');
 
-      const user = await login({ email, password });
+      const user = await register({ email, password });
       setUser(user);
       router.push('/profile');
     } catch {
-      setError('Login failed');
+      setError('Registration failed');
     }
   };
 
   return (
     <main className={css.mainContent}>
-      <form className={css.form} action={handleSubmit}>
-        <h1 className={css.formTitle}>Sign in</h1>
+      <h1 className={css.formTitle}>Sign up</h1>
 
+      <form className={css.form} action={handleSubmit}>
         <div className={css.formGroup}>
           <label htmlFor="email">Email</label>
           <input
@@ -55,7 +55,7 @@ export default function SignInPage() {
 
         <div className={css.actions}>
           <button type="submit" className={css.submitButton}>
-            Log in
+            Register
           </button>
         </div>
 

@@ -1,7 +1,8 @@
 import { cookies } from 'next/headers';
+import type { AxiosResponse } from 'axios';
+import { api } from './api';
 import type { Note } from '@/types/note';
 import type { User } from '@/types/user';
-import { api } from './api';
 
 export type NotesResponse = {
   notes: Note[];
@@ -14,8 +15,8 @@ const getCookieHeader = async () => {
 };
 
 export const fetchNotes = async (
-  search: string = '',
-  page: number = 1,
+  search = '',
+  page = 1,
   tag?: string
 ): Promise<NotesResponse> => {
   const params: Record<string, string | number> = {
@@ -24,9 +25,7 @@ export const fetchNotes = async (
     perPage: 12,
   };
 
-  if (tag) {
-    params.tag = tag;
-  }
+  if (tag) params.tag = tag;
 
   const { data } = await api.get<NotesResponse>('/notes', {
     params,
@@ -48,14 +47,12 @@ export const fetchNoteById = async (id: string): Promise<Note> => {
   return data;
 };
 
-export const checkSession = async (): Promise<User | null> => {
-  const { data } = await api.get<User | null>('/auth/session', {
+export const checkSession = async (): Promise<AxiosResponse<User | null>> => {
+  return api.get<User | null>('/auth/session', {
     headers: {
       Cookie: await getCookieHeader(),
     },
   });
-
-  return data ?? null;
 };
 
 export const getMe = async (): Promise<User> => {
