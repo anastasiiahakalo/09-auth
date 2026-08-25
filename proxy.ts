@@ -1,51 +1,50 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
+import { parseSetCookie } from 'cookie';
+
 import { checkSession } from '@/lib/api/serverApi';
 
 const privateRoutes = ['/notes', '/profile'];
 const publicRoutes = ['/sign-in', '/sign-up'];
 
-const parseCookie = (cookie: string) => {
-  const [nameValue, ...options] = cookie.split(';');
-  const [name, value] = nameValue.split('=');
+type ParsedCookie = ReturnType<typeof parseSetCookie>;
 
-  const cookieOptions: {
-    path?: string;
-    maxAge?: number;
-    httpOnly?: boolean;
-    secure?: boolean;
-    sameSite?: 'strict' | 'lax' | 'none';
-  } = {};
+function setResponseCookies(
+  response: NextResponse,
+  parsedCookies: ParsedCookie[]
+) {
+  parsedCookies.forEach((cookie) => {
+    if (!cookie.name || !cookie.value) return;
 
-  options.forEach((option) => {
-    const [key, optionValue] = option.trim().split('=');
-    const lowerKey = key.toLowerCase();
+    const {
+      name,
+      value,
+      expires,
+      maxAge,
+      domain,
+      path,
+      httpOnly,
+      secure,
+      sameSite,
+      priority,
+      partitioned,
+    } = cookie;
 
-    if (lowerKey === 'path') cookieOptions.path = optionValue;
-    if (lowerKey === 'max-age') cookieOptions.maxAge = Number(optionValue);
-    if (lowerKey === 'httponly') cookieOptions.httpOnly = true;
-    if (lowerKey === 'secure') cookieOptions.secure = true;
-    if (lowerKey === 'samesite') {
-      const sameSite = optionValue?.toLowerCase();
-
-      if (
-        sameSite === 'strict' ||
-        sameSite === 'lax' ||
-        sameSite === 'none'
-      ) {
-        cookieOptions.sameSite = sameSite;
-      }
-    }
+    response.cookies.set(name, value, {
+      expires,
+      maxAge,
+      domain,
+      path,
+      httpOnly,
+      secure,
+      sameSite,
+      priority,
+      partitioned,
+    });
   });
+}
 
-  return {
-    name,
-    value,
-    options: cookieOptions,
-  };
-};
-
-export default async function proxy(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   const isPrivateRoute = privateRoutes.some((route) =>
@@ -62,30 +61,29 @@ export default async function proxy(request: NextRequest) {
   const refreshToken = cookieStore.get('refreshToken')?.value;
 
   let isAuthenticated = Boolean(accessToken);
-
-  const response = NextResponse.next();
+  let refreshedCookies: ParsedCookie[] = [];
 
   if (!accessToken && refreshToken) {
     try {
       const sessionResponse = await checkSession();
 
-      const setCookie = sessionResponse.headers['set-cookie'];
+      const setCookieHeader = sessionResponse.headers['set-cookie'];
 
-      if (setCookie) {
-        const cookiesToSet = Array.isArray(setCookie) ? setCookie : [setCookie];
+      const cookieStrings = Array.isArray(setCookieHeader)
+        ? setCookieHeader
+        : setCookieHeader
+          ? [setCookieHeader]
+          : [];
 
-        cookiesToSet.forEach((cookie) => {
-          const parsedCookie = parseCookie(cookie);
+      refreshedCookies = cookieStrings.map((cookieString) =>
+        parseSetCookie(cookieString)
+      );
 
-          response.cookies.set(
-            parsedCookie.name,
-            parsedCookie.value,
-            parsedCookie.options
-          );
-        });
-      }
+      const newAccessToken = refreshedCookies.find(
+        (cookie) => cookie.name === 'accessToken' && Boolean(cookie.value)
+      );
 
-      isAuthenticated = Boolean(sessionResponse.data);
+      isAuthenticated = Boolean(newAccessToken);
     } catch {
       isAuthenticated = false;
     }
@@ -94,14 +92,28 @@ export default async function proxy(request: NextRequest) {
   if (isPrivateRoute && !isAuthenticated) {
     const url = request.nextUrl.clone();
     url.pathname = '/sign-in';
-    return NextResponse.redirect(url);
+
+    const response = NextResponse.redirect(url);
+
+    setResponseCookies(response, refreshedCookies);
+
+    return response;
   }
 
   if (isPublicRoute && isAuthenticated) {
     const url = request.nextUrl.clone();
     url.pathname = '/';
-    return NextResponse.redirect(url);
+
+    const response = NextResponse.redirect(url);
+
+    setResponseCookies(response, refreshedCookies);
+
+    return response;
   }
+
+  const response = NextResponse.next();
+
+  setResponseCookies(response, refreshedCookies);
 
   return response;
 }
